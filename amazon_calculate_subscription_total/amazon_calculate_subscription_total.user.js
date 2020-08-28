@@ -1,16 +1,19 @@
 // ==UserScript==
 // @name         amazon_calculate_subscription_total
 // @namespace    https://github.com/LeoCrayon/Monkeyscripts
-// @version      0.2
+// @version      0.3
 // @description  Amazon calculate subscription total.
 // @author       LeoCrayon
-// @license      GNU General Public License v3.0
+// @license      GPL-3.0-or-later; https://www.gnu.org/licenses/gpl-3.0.txt
 // @match        https://www.amazon.com/auto-deliveries/*
 // @match        https://www.amazon.com/gp/subscribe-and-save/*
 // @grant        none
 // ==/UserScript==
 (function() {
     'use strict';
+
+    // =========================================
+    // Ajax utils.
 
     const sendRequest = (url) => {
         var xhr = new XMLHttpRequest();
@@ -30,6 +33,7 @@
     };
 
     // ==========================================
+    // Price utils.
 
     const parsePrice = (priceString) => {
         const startPos = priceString.search(/\d/);
@@ -54,15 +58,6 @@
             }
         });
         return currency + totalPrice.toFixed(2);
-    };
-
-    const getDirectPrice = (deliveryCard) => {
-        const priceEls = deliveryCard.querySelectorAll(".subscription-price");
-        const priceObjs = [];
-        priceEls.forEach((priceEl) => {
-            priceObjs.push(parsePrice(priceEl.innerText));
-        });
-        return calculatePriceTotal(priceObjs);
     };
 
     // ==========================================
@@ -124,6 +119,15 @@
         return {
             price: calculatePriceTotal(priceObjs),
             unavailableProducts};
+    };
+
+    const getDirectPrice = (deliveryCard) => {
+        const priceEls = deliveryCard.querySelectorAll(".subscription-price");
+        const priceObjs = [];
+        priceEls.forEach((priceEl) => {
+            priceObjs.push(parsePrice(priceEl.innerText));
+        });
+        return calculatePriceTotal(priceObjs);
     };
 
     const process = () => {
