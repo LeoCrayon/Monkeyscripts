@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         AmazonCalculateSubscriptionTotal
+// @name         amazon_calculate_subscription_total
 // @namespace    https://github.com/LeoCrayon/Monkeyscripts
-// @version      0.1
+// @version      0.2
 // @description  Amazon calculate subscription total.
 // @author       LeoCrayon
 // @license      GNU General Public License v3.0
@@ -32,22 +32,37 @@
     // ==========================================
 
     const parsePrice = (priceString) => {
-        const startPos = priceString.indexOf("$") + 1;
+        const startPos = priceString.search(/\d/);
         const leftBracketsPos = priceString.indexOf("(");
         const endPos = leftBracketsPos < 0 ? priceString.length : leftBracketsPos;
-        return parseFloat(priceString.substring(startPos, endPos));
+        return {
+            price: parseFloat(priceString.substring(startPos, endPos)),
+            currency: startPos - 1 >= 0 ? priceString.charAt(startPos - 1) : ""
+        };
+    };
+
+    const calculatePriceTotal = (priceObjs) => {
+        let totalPrice = 0;
+        let currency = "";
+
+        priceObjs.forEach((priceObj) => {
+            if (priceObj && priceObj.price) {
+                if (!currency) {
+                    currency = priceObj.currency;
+                }
+                totalPrice += priceObj.price;
+            }
+        });
+        return currency + totalPrice.toFixed(2);
     };
 
     const getDirectPrice = (deliveryCard) => {
         const priceEls = deliveryCard.querySelectorAll(".subscription-price");
-        let totalPrice = 0;
+        const priceObjs = [];
         priceEls.forEach((priceEl) => {
-            const price = parsePrice(priceEl.innerText);
-            if (price) {
-            totalPrice += price;
-            }
+            priceObjs.push(parsePrice(priceEl.innerText));
         });
-        return totalPrice;
+        return calculatePriceTotal(priceObjs);
     };
 
     // ==========================================
@@ -66,7 +81,7 @@
             priceEl = productPageDom.querySelector("#priceblock_ourprice");
         }
         return {
-            price: parsePrice(priceEl.innerText),
+            productPrice: parsePrice(priceEl.innerText),
             notSns: !snsContainerEl,
             productName: productTitleEl.innerText.trim()
         };
@@ -75,7 +90,7 @@
     const getProductPrice = async (productEl) => {
         const productSubEditUrlEl = productEl.querySelector(".a-declarative");
         if (!productSubEditUrlEl) {
-            return {price: 0};
+            return {productPrice: {price: 0}};
         }
         const productSubEditUrlJson = JSON.parse(productSubEditUrlEl.dataset.aModal);
         const productSubEditUrl = productSubEditUrlJson.url;
@@ -94,11 +109,11 @@
 
     const getIndirectPrice = async (deliveryCard) => {
         const productEls = deliveryCard.querySelectorAll(".subscription-card");
-        const prices = [];
+        const priceObjs = [];
         const unavailableProducts = [];
         await Promise.all(Array.from(productEls).map(async (productEl) => {
             const priceObj = await getProductPrice(productEl);
-            prices.push(priceObj.price);
+            priceObjs.push(priceObj.productPrice);
             if (priceObj.notSns) {
                 const unavailableProduct = {};
                 unavailableProduct.name = priceObj.productName;
@@ -107,9 +122,7 @@
             }
         }));
         return {
-            price: prices.reduce((total, num) => {
-                return total + num;
-            }, 0),
+            price: calculatePriceTotal(priceObjs),
             unavailableProducts};
     };
 
@@ -121,7 +134,11 @@
 
             const totalPriceContainerEl = document.createElement("DIV");
             informationContainerEl.appendChild(totalPriceContainerEl);
-            totalPriceContainerEl.style.marginTop = "8px";
+            totalPriceContainerEl.classList.add("deliveryTile");
+            Object.assign(totalPriceContainerEl.style, {
+                marginTop: "8px",
+                float: "none",
+            });
 
             const totalPriceLabelEl = document.createElement("SPAN");
             totalPriceContainerEl.appendChild(totalPriceLabelEl);
@@ -130,6 +147,17 @@
             const totalPriceEl = document.createElement("SPAN");
             totalPriceContainerEl.appendChild(totalPriceEl);
             totalPriceEl.classList.add("a-size-base-plus", "a-color-price", "subscription-price", "a-text-bold");
+
+            const spinnerEl = document.createElement("SPAN");
+            totalPriceContainerEl.appendChild(spinnerEl);
+            spinnerEl.classList.add("deliveryTileContent", "spinner", "cartSpinner");
+            Object.assign(spinnerEl.style,{
+                backgroundSize: "20px",
+                width: "20px",
+                height:"20px",
+                display: "inline-block",
+                verticalAlign: "middle"
+            });
 
             if (index === 0) {
                 totalPriceLabelEl.innerText = "Total: ";
@@ -153,7 +181,7 @@
                         const unavailableProductEl = document.createElement("DIV");
                         unavailableProductsContainerEl.appendChild(unavailableProductEl);
                         unavailableProductEl.classList.add("a-size-small");
-                        unavailableProductEl.style.marginTop = "4px";
+                        unavailableProductEl.style.marginTop = "6px";
 
                         const unavailableProductLinkEl = document.createElement("A");
                         unavailableProductEl.appendChild(unavailableProductLinkEl);
@@ -164,6 +192,8 @@
                     });
                 }
             }
+
+            spinnerEl.remove();
         });
     };
 
