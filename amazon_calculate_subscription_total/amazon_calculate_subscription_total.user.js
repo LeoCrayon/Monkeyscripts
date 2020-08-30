@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         amazon_calculate_subscription_total
 // @namespace    https://github.com/LeoCrayon/Monkeyscripts
-// @version      0.3
+// @version      0.4
 // @description  Amazon calculate subscription total.
 // @author       LeoCrayon
 // @license      GPL-3.0-or-later; https://www.gnu.org/licenses/gpl-3.0.txt
@@ -9,6 +9,7 @@
 // @match        https://www.amazon.com/gp/subscribe-and-save/*
 // @grant        none
 // ==/UserScript==
+/*jshint esversion: 8 */
 (function() {
     'use strict';
 
@@ -54,11 +55,16 @@
                 if (!currency) {
                     currency = priceObj.currency;
                 }
-                totalPrice += priceObj.price;
+                totalPrice += priceObj.price * (priceObj.quantity || 1);
             }
         });
         return currency + totalPrice.toFixed(2);
     };
+
+    const parseQuantity = (quantityString) => {
+        const startPos = quantityString.search(/\d/);
+        return parseInt(quantityString.substring(startPos));
+    }
 
     // ==========================================
 
@@ -83,12 +89,14 @@
     }
 
     const getProductPrice = async (productEl) => {
-        const productSubEditUrlEl = productEl.querySelector(".a-declarative");
-        if (!productSubEditUrlEl) {
+        const subEditUrlEl = productEl.querySelector(".a-declarative");
+        if (!subEditUrlEl) {
             return {productPrice: {price: 0}};
         }
-        const productSubEditUrlJson = JSON.parse(productSubEditUrlEl.dataset.aModal);
-        const productSubEditUrl = productSubEditUrlJson.url;
+        const subEditUrlJson = JSON.parse(subEditUrlEl.dataset.aModal);
+        const productSubEditUrl = subEditUrlJson.url;
+        const quantityEl = productEl.querySelector(".subscription-quantity-message");
+        const quantity = quantityEl ? parseQuantity(quantityEl.innerText) : 1;
 
         const productSubEditHtml = await sendRequest(productSubEditUrl);
         const productSubEditDom = new DOMParser().parseFromString(productSubEditHtml, "text/html");
@@ -99,6 +107,7 @@
         const productPageDom = new DOMParser().parseFromString(productPageHtml, "text/html");
         const priceObj = getPriceFromProductPage(productPageDom);
         priceObj.productLink = productPageUrl;
+        priceObj.productPrice.quantity = quantity;
         return priceObj;
     };
 
@@ -110,9 +119,10 @@
             const priceObj = await getProductPrice(productEl);
             priceObjs.push(priceObj.productPrice);
             if (priceObj.notSns) {
-                const unavailableProduct = {};
-                unavailableProduct.name = priceObj.productName;
-                unavailableProduct.link = priceObj.productLink;
+                const unavailableProduct = {
+                    name: priceObj.productName,
+                    link: priceObj.productLink
+                };
                 unavailableProducts.push(unavailableProduct);
             }
         }));
