@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         amazon_calculate_subscription_total
 // @namespace    https://github.com/LeoCrayon/Monkeyscripts
-// @version      0.4
+// @version      0.5
 // @description  Amazon calculate subscription total.
 // @author       LeoCrayon
 // @license      GPL-3.0-or-later; https://www.gnu.org/licenses/gpl-3.0.txt
@@ -82,8 +82,9 @@
             priceEl = productPageDom.querySelector("#priceblock_ourprice");
         }
         return {
-            productPrice: parsePrice(priceEl.innerText),
+            productPrice: priceEl ? parsePrice(priceEl.innerText) : {price: 0},
             notSns: !snsContainerEl,
+            unavailable: !priceEl,
             productName: productTitleEl.innerText.trim()
         };
     }
@@ -114,11 +115,19 @@
     const getIndirectPrice = async (deliveryCard) => {
         const productEls = deliveryCard.querySelectorAll(".subscription-card");
         const priceObjs = [];
+        const notSnsProducts = [];
         const unavailableProducts = [];
         await Promise.all(Array.from(productEls).map(async (productEl) => {
             const priceObj = await getProductPrice(productEl);
             priceObjs.push(priceObj.productPrice);
             if (priceObj.notSns) {
+                const notSnsProduct = {
+                    name: priceObj.productName,
+                    link: priceObj.productLink
+                };
+                notSnsProducts.push(notSnsProduct);
+            }
+            if (priceObj.unavailable) {
                 const unavailableProduct = {
                     name: priceObj.productName,
                     link: priceObj.productLink
@@ -128,6 +137,7 @@
         }));
         return {
             price: calculatePriceTotal(priceObjs),
+            notSnsProducts,
             unavailableProducts};
     };
 
@@ -181,30 +191,37 @@
                 const priceObj = await getIndirectPrice(deliveryCardEl);
                 totalPriceEl.innerText = priceObj.price;
 
-                if (priceObj.unavailableProducts.length > 0) {
-                    const unavailableProductsContainerEl = document.createElement("DIV");
-                    informationContainerEl.appendChild(unavailableProductsContainerEl);
-                    unavailableProductsContainerEl.style.marginTop = "8px";
+                const createProductList = (products, label) => {
+                    if (products.length === 0) {
+                        return;
+                    }
+                    const productsContainerEl = document.createElement("DIV");
+                    informationContainerEl.appendChild(productsContainerEl);
+                    productsContainerEl.style.marginTop = "8px";
 
-                    const unavailableProductsLabelEl = document.createElement("SPAN");
-                    unavailableProductsContainerEl.appendChild(unavailableProductsLabelEl);
-                    unavailableProductsLabelEl.classList.add("a-size-small", "a-text-bold");
+                    const productsLabelEl = document.createElement("SPAN");
+                    productsContainerEl.appendChild(productsLabelEl);
+                    productsLabelEl.classList.add("a-size-small", "a-text-bold");
 
-                    unavailableProductsLabelEl.innerText = "Potential unavailable: ";
-                    priceObj.unavailableProducts.forEach((unavailableProduct) => {
-                        const unavailableProductEl = document.createElement("DIV");
-                        unavailableProductsContainerEl.appendChild(unavailableProductEl);
-                        unavailableProductEl.classList.add("a-size-small");
-                        unavailableProductEl.style.marginTop = "6px";
+                    productsLabelEl.innerText = label;
+                    products.forEach((product) => {
+                        const productEl = document.createElement("DIV");
+                        productsContainerEl.appendChild(productEl);
+                        productEl.classList.add("a-size-small");
+                        productEl.style.marginTop = "6px";
 
-                        const unavailableProductLinkEl = document.createElement("A");
-                        unavailableProductEl.appendChild(unavailableProductLinkEl);
-                        unavailableProductLinkEl.classList.add("a-link-normal", "product-title");
+                        const productLinkEl = document.createElement("A");
+                        productEl.appendChild(productLinkEl);
+                        productLinkEl.classList.add("a-link-normal", "product-title");
 
-                        unavailableProductLinkEl.innerText = unavailableProduct.name;
-                        unavailableProductLinkEl.setAttribute("href", unavailableProduct.link);
+                        productLinkEl.innerText = product.name;
+                        productLinkEl.setAttribute("href", product.link);
                     });
-                }
+
+                };
+
+                createProductList(priceObj.notSnsProducts, "Potential not Sns: ");
+                createProductList(priceObj.unavailableProducts, "Potential unavailable: ");
             }
 
             spinnerEl.remove();
